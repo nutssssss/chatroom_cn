@@ -14,7 +14,7 @@
 #define FILE_BUFFER_SIZE 1024
 #define MAX_CLIENTS 100
 #define BUFFER_SZ 2048
-
+#define STORAGE_DIRECTORY "/Users/samikpujari/projects/cnminiproj/Chatroom-in-C/files/"
 static _Atomic unsigned int cli_count = 0;
 static int uid = 10;
 void send_file(char *filename, int uid);
@@ -102,6 +102,41 @@ void send_message(char *s, int uid){
 	pthread_mutex_unlock(&clients_mutex);
 }
 
+void receive_and_save_file(int sockfd, const char *filename) {
+    char filepath[256]; // Adjust the size as needed
+    sprintf(filepath, "%s%s", STORAGE_DIRECTORY, filename);
+
+	printf("storage directory______________________%s : ", filepath);
+
+    int file_fd = open(filepath, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (file_fd < 0) {
+        perror("hereee ERROR: Unable to create or open file for writing");
+        return;
+    }
+
+    char file_buffer[FILE_BUFFER_SIZE];
+    ssize_t read_size;
+
+    while (1) {
+        // Receive data in chunks
+        read_size = recv(sockfd, file_buffer, FILE_BUFFER_SIZE, 0);
+        if (read_size > 0) {
+            // Write the received data to the file
+            write(file_fd, file_buffer, read_size);
+        } else if (read_size == 0) {
+            break; // File transfer completed
+        } else {
+            perror("ERROR: Unable to receive file");
+            break;
+        }
+    }
+
+    close(file_fd);
+    printf("File received and saved: %s\n", filepath);
+}
+
+
+
 /* Handle all communication with the client */
 void *handle_client(void *arg){
 	char buff_out[BUFFER_SZ];
@@ -124,33 +159,66 @@ void *handle_client(void *arg){
 
 	bzero(buff_out, BUFFER_SZ);
 
-	while(1){
-		if (leave_flag) {
-			break;
-		}
+	// while(1){
+	// 	if (leave_flag) {
+	// 		break;
+	// 	}
 
-		int receive = recv(cli->sockfd, buff_out, BUFFER_SZ, 0);
-		if (receive > 0){
-			if(strlen(buff_out) > 0){
-				send_message(buff_out, cli->uid);
+	// 	int receive = recv(cli->sockfd, buff_out, BUFFER_SZ, 0);
+	// 	if (receive > 0){
+	// 		if(strlen(buff_out) > 0){
+	// 			send_message(buff_out, cli->uid);
 
-				str_trim_lf(buff_out, strlen(buff_out));
-				printf("%s -> %s\n", buff_out, cli->name);
-			}
-		} else if (receive == 0 || strcmp(buff_out, "exit") == 0){
-			sprintf(buff_out, "%s has left\n", cli->name);
-			printf("%s", buff_out);
-			send_message(buff_out, cli->uid);
-			leave_flag = 1;
-		} else {
-			printf("ERROR: -1\n");
-			leave_flag = 1;
-		}
+	// 			str_trim_lf(buff_out, strlen(buff_out));
+	// 			printf("%s -> %s\n", buff_out, cli->name);
+	// 		}
+	// 	} else if (receive == 0 || strcmp(buff_out, "exit") == 0){
+	// 		sprintf(buff_out, "%s has left\n", cli->name);
+	// 		printf("%s", buff_out);
+	// 		send_message(buff_out, cli->uid);
+	// 		leave_flag = 1;
+	// 	} else {
+	// 		printf("ERROR: -1\n");
+	// 		leave_flag = 1;
+	// 	}
 
-		bzero(buff_out, BUFFER_SZ);
-	}
+	// 	bzero(buff_out, BUFFER_SZ);
+	// }
 
-	while (1) {
+	// while (1) {
+    //     if (leave_flag) {
+    //         break;
+    //     }
+
+    //     int receive = recv(cli->sockfd, buff_out, BUFFER_SZ, 0);
+    //     if (receive > 0) {
+    //         if (strlen(buff_out) > 0) {
+    //             // Check if it's a file transfer request
+    //             if (strstr(buff_out, "sendfile") != NULL) {
+    //                 // Extract the filename from the message
+    //                 char *filename = buff_out + strlen("sendfile") + 1;
+    //                 send_file(filename, cli->uid);
+    //             } else {
+    //                 // Handle regular messages
+    //                 send_message(buff_out, cli->uid);
+
+    //                 str_trim_lf(buff_out, strlen(buff_out));
+    //                 printf("%s -> %s\n", buff_out, cli->name);
+    //             }
+    //         }
+    //     } else if (receive == 0 || strcmp(buff_out, "exit") == 0) {
+    //         // ... (existing code)
+    //     } else {
+    //         printf("ERROR: -1\n");
+    //         leave_flag = 1;
+    //     }
+
+    //     bzero(buff_out, BUFFER_SZ);
+    // }
+
+	 while (1) {
+
+		// printf("hereee___________________");
         if (leave_flag) {
             break;
         }
@@ -162,7 +230,9 @@ void *handle_client(void *arg){
                 if (strstr(buff_out, "sendfile") != NULL) {
                     // Extract the filename from the message
                     char *filename = buff_out + strlen("sendfile") + 1;
-                    send_file(filename, cli->uid);
+
+                    // Receive and save the file locally
+                    receive_and_save_file(cli->sockfd, filename);
                 } else {
                     // Handle regular messages
                     send_message(buff_out, cli->uid);
